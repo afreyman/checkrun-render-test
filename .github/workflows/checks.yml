@@ -1,0 +1,33 @@
+name: post-checks
+on:
+  pull_request:
+permissions:
+  checks: write
+  statuses: write
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          REPO: ${{ github.repository }}
+          DETAILS: ${{ github.server_url }}/${{ github.repository }}/pull/${{ github.event.pull_request.number }}
+        run: |
+          for c in action_required failure neutral success; do
+            gh api -X POST "repos/$REPO/check-runs" \
+              -f name="cr-$c" -f head_sha="$SHA" -f status=completed \
+              -f conclusion="$c" -f details_url="$DETAILS" \
+              -f "output[title]=Needs 1 approval from x-ranking" \
+              -f "output[summary]=conclusion=$c. Pending rule: ranking: one team approval." >/dev/null
+          done
+          gh api -X POST "repos/$REPO/check-runs" \
+            -f name="cr-in_progress" -f head_sha="$SHA" -f status=in_progress \
+            -f details_url="$DETAILS" \
+            -f "output[title]=Waiting for approval" \
+            -f "output[summary]=status=in_progress, never completed." >/dev/null
+          for s in pending failure; do
+            gh api -X POST "repos/$REPO/statuses/$SHA" \
+              -f context="st-$s" -f state="$s" -f target_url="$DETAILS" \
+              -f description="0/1 rules approved" >/dev/null
+          done
